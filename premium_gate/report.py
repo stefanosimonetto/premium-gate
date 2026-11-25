@@ -19,6 +19,9 @@ def markdown(result: dict) -> str:
         lines += ["> **Offline mode.** Replies came from the built-in mock model, whose failure rates are hand-set "
                   "assumptions keyed to controls it detects in the system prompt. This run checks the pipeline; it is "
                   "not a risk measurement. Add an `OPENROUTER_API_KEY` secret to price the real model.", ""]
+    if run.get("failed_calls"):
+        lines += [f"> ⚠️ **{run['failed_calls']} model calls failed** and were scored as wrong information, which overstates the loss. "
+                  "Check the API key, model slug and rate limits, then re-run.", ""]
     verdict = "✅ pass" if result["gate"]["pass"] else "⛔ blocked"
     if price["bound"]:
         if price["significant"]:

@@ -1,0 +1,64 @@
+name: bind-baseline
+
+# Price the configuration on main with the live model and record it as the bound
+# baseline. Run it from the Actions tab after changing the model, the rating plan,
+# or anything else that should reset what the premium is measured against.
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Runs per request (PR runs will use the same number)
+        default: "10"
+      premium:
+        description: Bound premium in USD (blank = indicated premium)
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency: bind-baseline
+
+jobs:
+  bind:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/support-agent
+    env:
+      RUNS: ${{ inputs.runs }}
+      PREMIUM: ${{ inputs.premium }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install --quiet ../..
+
+      - name: Price the current configuration on the live model
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          [[ "$RUNS" =~ ^[0-9]+$ ]] || { echo "::error::runs must be a whole number"; exit 1; }
+          [[ -z "$PREMIUM" || "$PREMIUM" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "::error::premium must be a number"; exit 1; }
+          [ -n "$OPENROUTER_API_KEY" ] || { echo "::error::The OPENROUTER_API_KEY secret is not set"; exit 1; }
+          premium-gate run --provider openrouter --runs "$RUNS" --out out/bind
+          cat out/bind/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bind-report
+          path: examples/support-agent/out/bind/
+
+      - name: Bind and set PR runs to match
+        run: |
+          premium-gate bind --report out/bind/report.json --out .premium-gate/baseline.json ${PREMIUM:+--premium "$PREMIUM"}
+          sed -i -E "s/^(  runs: )[0-9]+/\1$RUNS/" ai-risk.yaml
+
+      - name: Commit the new baseline to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .premium-gate/baseline.json ai-risk.yaml
+          MODEL=$(python -c "import json;print(json.load(open('out/bind/report.json'))['run']['model'])")
+          git commit -m "Rebind support-agent baseline on live $MODEL ($RUNS runs)"
+          git push
