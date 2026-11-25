@@ -18,7 +18,7 @@ from pathlib import Path
 from . import __version__
 from .grader import grade_llm, grade_rules
 from .manifest import load_manifest
-from .providers import MockProvider, detect_controls, get_provider
+from .providers import KEY_ENV, MockProvider, detect_controls, get_provider
 from .rating import expected_loss, load_plan, reprice
 from .report import markdown, predicate, statement
 
@@ -37,8 +37,8 @@ def _git() -> dict:
 def _choose_provider(requested: str, manifest):
     agent = manifest.agent
     if requested == "auto":
-        want = agent.get("provider", "anthropic")
-        key = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}.get(want)
+        want = agent.get("provider", "openrouter")
+        key = KEY_ENV.get(want)
         requested = want if key and os.environ.get(key) else "mock"
     return get_provider(requested, agent.get("model", "mock-1"))
 
@@ -190,7 +190,7 @@ def main(argv=None) -> int:
     r = sub.add_parser("run", help="test, price and attest the current AI configuration")
     r.add_argument("--manifest", default="ai-risk.yaml")
     r.add_argument("--out", default=".premium-gate/out")
-    r.add_argument("--provider", default="auto", choices=["auto", "anthropic", "openai", "mock"])
+    r.add_argument("--provider", default="auto", choices=["auto", "openrouter", "anthropic", "openai", "mock"])
     r.add_argument("--runs", type=int)
     r.add_argument("--system-prompt", help="test this prompt file instead of the manifest's")
     r.add_argument("--enforce", action="store_true", help="exit 1 when the gate blocks")

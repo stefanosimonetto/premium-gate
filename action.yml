@@ -9,7 +9,7 @@ inputs:
     description: Path to ai-risk.yaml
     default: ai-risk.yaml
   provider:
-    description: auto | anthropic | openai | mock (auto uses the manifest's provider when its API key is set, otherwise mock)
+    description: auto | openrouter | anthropic | openai | mock (auto uses the manifest's provider when its API key is set, otherwise mock)
     default: auto
   runs:
     description: Runs per request (overrides the manifest)

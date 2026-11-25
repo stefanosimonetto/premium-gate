@@ -56,7 +56,7 @@ Return JSON only: an array of {"key": string, "outcome": label, "reason": at mos
 def grade_llm(judge, policy: str, items: list[dict]) -> dict[str, tuple[str, str]]:
     """items: [{key, customer, expected, reply}] -> {key: (outcome, reason)}"""
     user = f"Policy:\n{policy}\n\nItems:\n{json.dumps(items, indent=1)}"
-    text = judge.complete(JUDGE_INSTRUCTIONS, user, max_tokens=4000)
+    text = judge.complete(JUDGE_INSTRUCTIONS, user, max_tokens=8000)
     m = re.search(r"\[[\s\S]*\]", text)
     out: dict[str, tuple[str, str]] = {}
     if not m:

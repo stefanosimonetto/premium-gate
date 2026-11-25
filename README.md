@@ -36,7 +36,7 @@ Results with the **offline mock model**, 13 requests × 60 runs each. The policy
 | Deployment factor | 1.00× | 0.80× (raw 0.37×, clipped to the band) |
 | Premium | $106,200 | **$84,960** |
 
-**Read this honestly.** The mock model's failure rates are hand-set assumptions keyed to controls it detects in the prompt ([`providers.py`](premium_gate/providers.py)), so this demo proves the pipeline, not the effect. To measure the effect on a real model, add an `ANTHROPIC_API_KEY` repository secret. The same workflow then runs the live model and an LLM judge.
+**Read this honestly.** The mock model's failure rates are hand-set assumptions keyed to controls it detects in the prompt ([`providers.py`](premium_gate/providers.py)), so this demo proves the pipeline, not the effect. To measure the effect on a real model, add an `OPENROUTER_API_KEY` repository secret. The same workflow then runs the live model (`anthropic/claude-haiku-5.5` via [OpenRouter](https://openrouter.ai)) and an LLM judge.
 
 ## Quick start
 
@@ -49,7 +49,7 @@ premium-gate run --provider mock --system-prompt agent/prompts/secure.md --out o
 premium-gate check-deploy --report out/secure/report.json   # refuses: config differs from what's deployed
 ```
 
-With `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) set, `--provider auto` (the default) uses the live model from the manifest.
+With `OPENROUTER_API_KEY` set, `--provider auto` (the default) uses the live model from the manifest. Any [OpenRouter model slug](https://openrouter.ai/models) works, so the same scenarios can price the same prompt on different models. Direct `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are also supported.
 
 ## In GitHub Actions
 
@@ -61,7 +61,7 @@ steps:
     with:
       manifest: ai-risk.yaml
     env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
 See [`.github/workflows/support-agent.yml`](.github/workflows/support-agent.yml) for the full PR → price → attest → gated deploy flow.
@@ -76,8 +76,8 @@ deployment:
   volume_per_year: 200000
   money_topic_share: 0.05
 agent:
-  provider: anthropic
-  model: claude-haiku-5-5
+  provider: openrouter
+  model: anthropic/claude-haiku-5.5
   system_prompt: agent/system_prompt.md
   knowledge: [agent/policy.md]
 scenarios: [agent/scenarios.yaml]   # requests whose right answer comes from your policy
