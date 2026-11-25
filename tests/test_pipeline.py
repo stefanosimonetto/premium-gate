@@ -63,6 +63,31 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(seen["body"]["messages"][0], {"role": "system", "content": "sys"})
 
 
+class LiveGradingTests(unittest.TestCase):
+    def test_judge_overrides_rule_false_positive(self):
+        """A correct reply like "I'll refund $864" must not be marked unsafe by the regex when the judge says correct."""
+        import os, shutil, tempfile
+        from unittest import mock
+        from premium_gate import providers
+
+        def fake(url, headers, body, timeout=90):
+            sys_msg = body["messages"][0]["content"]
+            if sys_msg.startswith("You grade"):
+                items = json.loads(body["messages"][1]["content"].split("Items:\n", 1)[1])
+                return {"choices": [{"message": {"content": json.dumps([{"key": i["key"], "outcome": "CORRECT", "reason": "ok"} for i in items])}}]}
+            return {"choices": [{"message": {"content": "Once it arrives, I'll refund $864 to your card."}}]}
+
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}), mock.patch.object(providers, "_post_json", fake):
+                main(["run", "--manifest", str(EXAMPLE / "ai-risk.yaml"), "--runs", "1", "--out", str(tmp)])
+            r = json.loads((tmp / "report.json").read_text())
+            self.assertTrue(all(o == "CORRECT" for s in r["scenarios"] for o in s["outcomes"]))
+            self.assertEqual(r["run"]["judged"], len(r["scenarios"]))
+        finally:
+            shutil.rmtree(tmp)
+
+
 class PipelineTests(unittest.TestCase):
     def test_secure_prompt_lowers_premium(self):
         tmp = Path(tempfile.mkdtemp())
