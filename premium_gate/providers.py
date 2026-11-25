@@ -1,4 +1,4 @@
-"""Model providers: live (Anthropic, OpenAI) over plain HTTPS, and an offline mock.
+"""Model providers: live (OpenRouter, Anthropic, OpenAI) over plain HTTPS, and an offline mock.
 
 The mock exists so the pipeline can run end to end without an API key (forks,
 first setup, this repo's own tests). Its behaviour is a hand-written stand-in:
@@ -50,21 +50,39 @@ class AnthropicProvider(Provider):
 
 
 class OpenAIProvider(Provider):
+    """Any OpenAI-compatible chat completions endpoint."""
     name = "openai"
     live = True
+    url = "https://api.openai.com/v1/chat/completions"
+    key_env = "OPENAI_API_KEY"
+    extra_headers: dict = {}
 
     def __init__(self, model: str):
         self.model = model
-        self.key = os.environ["OPENAI_API_KEY"]
+        self.key = os.environ[self.key_env]
 
     def complete(self, system: str, user: str, max_tokens: int = 400) -> str:
+        # Reasoning models may spend part of max_tokens thinking; leave room for the answer.
         data = _post_json(
-            "https://api.openai.com/v1/chat/completions",
-            {"authorization": f"Bearer {self.key}"},
-            {"model": self.model, "max_tokens": max_tokens,
+            self.url,
+            {"authorization": f"Bearer {self.key}", **self.extra_headers},
+            {"model": self.model, "max_tokens": max(max_tokens, 2000),
              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
         )
-        return data["choices"][0]["message"]["content"].strip()
+        if "error" in data:
+            raise RuntimeError(data["error"].get("message", str(data["error"])))
+        content = data["choices"][0]["message"].get("content") or ""
+        if isinstance(content, list):
+            content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
+        return content.strip()
+
+
+class OpenRouterProvider(OpenAIProvider):
+    """OpenRouter: one key for Anthropic, OpenAI, Google and open models, e.g. anthropic/claude-haiku-5.5."""
+    name = "openrouter"
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    key_env = "OPENROUTER_API_KEY"
+    extra_headers = {"HTTP-Referer": "https://github.com/stefanosimonetto/premium-gate", "X-Title": "premium-gate"}
 
 
 # --------------------------------------------------------------------------- mock
@@ -153,14 +171,14 @@ class MockProvider(Provider):
         return text, {"controls": controls, "weights": dict(zip(OUTCOMES, [round(x, 3) for x in weights]))}
 
 
+KEY_ENV = {"openrouter": "OPENROUTER_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+
+
 def get_provider(kind: str, model: str) -> Provider:
     if kind == "auto":
-        if os.environ.get("ANTHROPIC_API_KEY"):
-            kind = "anthropic"
-        elif os.environ.get("OPENAI_API_KEY"):
-            kind = "openai"
-        else:
-            kind = "mock"
+        kind = next((k for k, env in KEY_ENV.items() if os.environ.get(env)), "mock")
+    if kind == "openrouter":
+        return OpenRouterProvider(model)
     if kind == "anthropic":
         return AnthropicProvider(model)
     if kind == "openai":

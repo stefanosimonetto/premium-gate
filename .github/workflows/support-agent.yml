@@ -25,7 +25,7 @@ jobs:
         with:
           manifest: examples/support-agent/ai-risk.yaml
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # unset -> offline mock mode
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}   # unset -> offline mock mode
     outputs:
       premium: ${{ steps.gate.outputs.premium }}
       digest: ${{ steps.gate.outputs.config-digest }}

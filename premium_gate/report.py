@@ -18,7 +18,7 @@ def markdown(result: dict) -> str:
     if not run["live"]:
         lines += ["> **Offline mode.** Replies came from the built-in mock model, whose failure rates are hand-set "
                   "assumptions keyed to controls it detects in the system prompt. This run checks the pipeline; it is "
-                  "not a risk measurement. Add an `ANTHROPIC_API_KEY` secret to price the real model.", ""]
+                  "not a risk measurement. Add an `OPENROUTER_API_KEY` secret to price the real model.", ""]
     verdict = "✅ pass" if result["gate"]["pass"] else "⛔ blocked"
     if price["bound"]:
         if price["significant"]:

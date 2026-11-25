@@ -9,8 +9,8 @@ deployment:
   money_topic_share: 0.05           # share about money, fees or policy
 
 agent:
-  provider: anthropic
-  model: claude-haiku-5-5
+  provider: openrouter
+  model: anthropic/claude-haiku-5.5   # any OpenRouter model slug
   system_prompt: agent/system_prompt.md   # what production runs
   knowledge: [agent/policy.md]
 

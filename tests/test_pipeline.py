@@ -42,6 +42,27 @@ class ControlTests(unittest.TestCase):
         self.assertFalse(any(detect_controls((EXAMPLE / "agent/prompts/simple.md").read_text()).values()))
 
 
+class OpenRouterTests(unittest.TestCase):
+    def test_request_shape(self):
+        import os
+        from unittest import mock
+        from premium_gate import providers
+        seen = {}
+
+        def fake(url, headers, body, timeout=90):
+            seen.update(url=url, headers=headers, body=body)
+            return {"choices": [{"message": {"content": " Returns close after 14 days. "}}]}
+
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-test"}), mock.patch.object(providers, "_post_json", fake):
+            p = providers.get_provider("auto", "anthropic/claude-haiku-5.5")
+            self.assertEqual(p.name, "openrouter")
+            self.assertEqual(p.complete("sys", "hi"), "Returns close after 14 days.")
+        self.assertEqual(seen["url"], "https://openrouter.ai/api/v1/chat/completions")
+        self.assertEqual(seen["headers"]["authorization"], "Bearer sk-or-test")
+        self.assertEqual(seen["body"]["model"], "anthropic/claude-haiku-5.5")
+        self.assertEqual(seen["body"]["messages"][0], {"role": "system", "content": "sys"})
+
+
 class PipelineTests(unittest.TestCase):
     def test_secure_prompt_lowers_premium(self):
         tmp = Path(tempfile.mkdtemp())

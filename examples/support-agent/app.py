@@ -1,6 +1,6 @@
 """Larkspur Mobile support agent: a minimal chat service (standard library only).
 
-    ANTHROPIC_API_KEY=... python app.py      # http://localhost:8080
+    OPENROUTER_API_KEY=... python app.py      # http://localhost:8080
 
 POST /chat {"message": "..."} -> {"reply": "..."}
 The system prompt and policy are read from agent/, the same files premium-gate
@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-MODEL = os.environ.get("AGENT_MODEL", "claude-haiku-5-5")
+MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-haiku-5.5")  # any OpenRouter slug
 SYSTEM = (ROOT / "agent/system_prompt.md").read_text() + "\n\n[Policy document]\n" + (ROOT / "agent/policy.md").read_text()
 
 PAGE = """<!doctype html><meta name=viewport content="width=device-width"><title>Larkspur support</title>
@@ -27,15 +27,17 @@ const q=document.createElement('p');q.textContent='Agent: '+(j.reply||j.error);l
 
 
 def ask(message: str) -> str:
-    key = os.environ.get("ANTHROPIC_API_KEY")
+    key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
-        raise RuntimeError("Set ANTHROPIC_API_KEY to run the agent.")
-    body = {"model": MODEL, "max_tokens": 400, "system": SYSTEM, "messages": [{"role": "user", "content": message}]}
-    req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=json.dumps(body).encode(),
-                                 headers={"content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01"})
+        raise RuntimeError("Set OPENROUTER_API_KEY to run the agent.")
+    body = {"model": MODEL, "max_tokens": 2000,
+            "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": message}]}
+    req = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions", data=json.dumps(body).encode(),
+                                 headers={"content-type": "application/json", "authorization": f"Bearer {key}",
+                                          "X-Title": "larkspur-support-agent"})
     with urllib.request.urlopen(req, timeout=60) as r:
         data = json.loads(r.read())
-    return "".join(b.get("text", "") for b in data["content"] if b.get("type") == "text")
+    return (data["choices"][0]["message"].get("content") or "").strip()
 
 
 class Handler(BaseHTTPRequestHandler):
