@@ -69,6 +69,9 @@ def cmd_run(a) -> int:
     with ThreadPoolExecutor(max_workers=1 if not provider.live else 4) as ex:
         for (s, r), text in ex.map(ask, jobs):
             replies[(s.id, r)] = text
+    failed = sum(1 for t in replies.values() if t.startswith("(call failed"))
+    if failed:
+        print(f"premium-gate: WARNING {failed} of {len(replies)} model calls failed; they are scored as wrong information", file=sys.stderr)
 
     # grade
     graded: dict[str, list[tuple[str, str]]] = {s.id: [None] * runs for s in m.scenarios}
@@ -80,7 +83,10 @@ def cmd_run(a) -> int:
                  for s in m.scenarios for r in range(runs)]
         verdicts = {}
         for i in range(0, len(items), 20):
-            verdicts.update(grade_llm(judge, m.knowledge(), items[i:i + 20]))
+            try:
+                verdicts.update(grade_llm(judge, m.knowledge(), items[i:i + 20]))
+            except Exception as e:
+                print(f"premium-gate: WARNING judge batch failed ({e}); falling back to rules for it", file=sys.stderr)
     for s in m.scenarios:
         for r in range(runs):
             reply = replies[(s.id, r)]
@@ -107,6 +113,7 @@ def cmd_run(a) -> int:
         "config": config,
         "scenario_sources": m.pack_hashes,
         "run": {"provider": provider.name, "model": provider.model, "live": provider.live, "runs": runs, "grader": grader_name,
+                "failed_calls": failed, "judged": len(verdicts) if provider.live else 0,
                 "system_prompt_file": str(sp_path.relative_to(m.root)) if sp_path.is_relative_to(m.root) else sp_path.name},
         "rating_plan": plan["version"],
         "loss": loss,
@@ -149,6 +156,14 @@ def cmd_run(a) -> int:
 
 def cmd_bind(a) -> int:
     r = json.loads(Path(a.report).read_text())
+    if r["run"].get("failed_calls"):
+        print(f"premium-gate: refusing to bind: {r['run']['failed_calls']} model calls failed in this run. Fix the cause and run again.", file=sys.stderr)
+        return 1
+    if r["run"]["live"] and r["run"].get("judged", 0) < sum(len(s["outcomes"]) for s in r["scenarios"]) * 0.9:
+        print("premium-gate: refusing to bind: the judge graded fewer than 90% of replies.", file=sys.stderr)
+        return 1
+    if not r["run"]["live"]:
+        print("premium-gate: note: binding a mock run. Live runs priced against it will not be meaningful.", file=sys.stderr)
     premium = a.premium if a.premium is not None else r["loss"]["indicated_premium_usd"]
     baseline = {
         "deployment": r["deployment"],
