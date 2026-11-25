@@ -1,0 +1,94 @@
+name: premium-gate
+description: Test an AI agent configuration, price its output risk, comment the premium change on the PR, and attest the result.
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  manifest:
+    description: Path to ai-risk.yaml
+    default: ai-risk.yaml
+  provider:
+    description: auto | anthropic | openai | mock (auto uses the manifest's provider when its API key is set, otherwise mock)
+    default: auto
+  runs:
+    description: Runs per request (overrides the manifest)
+    default: ""
+  enforce:
+    description: Fail the job when the deployment factor exceeds the manifest's max_factor
+    default: "true"
+  comment:
+    description: Post the report on the pull request
+    default: "true"
+  attest:
+    description: Sign the result with GitHub artifact attestations (Sigstore). Needs id-token and attestations write permissions.
+    default: "true"
+
+outputs:
+  premium:
+    value: ${{ steps.run.outputs.premium }}
+  factor:
+    value: ${{ steps.run.outputs.factor }}
+  expected-loss:
+    value: ${{ steps.run.outputs.expected-loss }}
+  config-digest:
+    value: ${{ steps.run.outputs.config-digest }}
+  pass:
+    value: ${{ steps.run.outputs.pass }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install premium-gate
+      shell: bash
+      run: pip install --quiet "${{ github.action_path }}"
+
+    - name: Test and price the AI configuration
+      id: run
+      shell: bash
+      run: |
+        set +e
+        premium-gate run --manifest "${{ inputs.manifest }}" --out premium-gate-out \
+          --provider "${{ inputs.provider }}" ${{ inputs.runs && format('--runs {0}', inputs.runs) || '' }}
+        echo "exit=$?" >> "$GITHUB_OUTPUT"
+        cat premium-gate-out/report.md >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body-file premium-gate-out/report.md || echo "Could not comment (fork PR or missing pull-requests write permission)"
+
+    - name: Attest the result (Sigstore)
+      if: inputs.attest == 'true' && github.event_name != 'pull_request' || inputs.attest == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+      continue-on-error: true
+      uses: actions/attest@v2
+      with:
+        subject-name: ${{ steps.run.outputs.subject-name }}
+        subject-digest: ${{ steps.run.outputs.config-digest }}
+        predicate-type: https://github.com/stefanosimonetto/premium-gate/attestation/v0.1
+        predicate-path: premium-gate-out/predicate.json
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: premium-gate-report
+        path: premium-gate-out/
+
+    - name: premium-gate errored
+      if: steps.run.outputs.exit != '0'
+      shell: bash
+      run: |
+        echo "::error::premium-gate run failed; see the step log."
+        exit 1
+
+    - name: Enforce the gate
+      if: inputs.enforce == 'true' && steps.run.outputs.pass != 'true'
+      shell: bash
+      run: |
+        echo "::error::premium-gate blocked this change: deployment factor ${{ steps.run.outputs.factor }} is above the manifest's max_factor."
+        exit 1

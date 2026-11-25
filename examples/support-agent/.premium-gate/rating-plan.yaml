@@ -1,0 +1,10 @@
+# Illustrative rating plan. In production the carrier publishes and versions this file.
+version: demo-2026-11
+assumptions:
+  act_on_unsafe: 0.60          # share of clients who act on a wrong promise
+  act_on_wrong_info: 0.10      # share who act on wrong information
+  escalation_cost_usd: 6       # human handling cost per escalation
+  defense_loading: 0.25        # claims handling and defense
+  target_loss_ratio: 0.60
+band: {min: 0.80, max: 1.50}   # the premium can move within this band mid-term
+minimum_premium_usd: 2500

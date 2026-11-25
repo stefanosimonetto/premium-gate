@@ -1,0 +1,53 @@
+name: support-agent
+
+# Every change to the demo agent's prompt, model, knowledge or manifest is tested and
+# priced. PRs get a premium comment; main gets an attested report and a gated deploy.
+on:
+  pull_request:
+    paths: ["examples/support-agent/**", "premium_gate/**", "action.yml"]
+  push:
+    branches: [main]
+    paths: ["examples/support-agent/**", "premium_gate/**", "action.yml"]
+  workflow_dispatch:
+
+jobs:
+  premium-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # post the premium comment
+      id-token: write        # Sigstore signing
+      attestations: write    # store the attestation
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        uses: ./
+        with:
+          manifest: examples/support-agent/ai-risk.yaml
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # unset -> offline mock mode
+    outputs:
+      premium: ${{ steps.gate.outputs.premium }}
+      digest: ${{ steps.gate.outputs.config-digest }}
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: premium-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install --quiet .
+      - uses: actions/download-artifact@v4
+        with: {name: premium-gate-report, path: premium-gate-out}
+      - name: Refuse unpriced configurations
+        run: premium-gate check-deploy --manifest examples/support-agent/ai-risk.yaml --report premium-gate-out/report.json
+      - name: Build the agent image
+        run: docker build -t larkspur-support-agent:${{ github.sha }} examples/support-agent
+      - name: Deploy
+        run: |
+          # Replace with your real target (Fly, Cloud Run, ECS, k8s). The deployed image
+          # carries the same prompt and policy files whose digest was priced:
+          echo "Deploying larkspur-support-agent:${{ github.sha }}"
+          echo "Priced config ${{ needs.premium-gate.outputs.digest }} at \$${{ needs.premium-gate.outputs.premium }}/yr" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "premium-gate"
+version = "0.1.0"
+description = "CI/CD gate that prices the risk of AI output on every deployment"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = ["pyyaml>=6"]
+
+[project.scripts]
+premium-gate = "premium_gate.cli:main"
+
+[tool.setuptools]
+packages = ["premium_gate"]
+
+[tool.setuptools.package-data]
+premium_gate = ["packs/*.yaml"]

@@ -1,0 +1,25 @@
+# premium-gate manifest: the application questions, as config.
+version: 1
+
+deployment:
+  name: larkspur-support-agent
+  delivery: direct_to_client        # direct_to_client | reviewed_by_staff
+  can_commit: [refunds, credits, waivers]
+  volume_per_year: 200000           # customer conversations
+  money_topic_share: 0.05           # share about money, fees or policy
+
+agent:
+  provider: anthropic
+  model: claude-haiku-5-5
+  system_prompt: agent/system_prompt.md   # what production runs
+  knowledge: [agent/policy.md]
+
+scenarios: [agent/scenarios.yaml]
+packs: [adversarial]
+
+baseline: .premium-gate/baseline.json   # the configuration the policy was bound on
+rating_plan: .premium-gate/rating-plan.yaml
+
+gate:
+  runs: 3
+  max_factor: 1.25                  # block changes that raise the premium more than 25%
